@@ -1,0 +1,5 @@
+dst_ip: 192.168.1.183
+local_iface: ''
+save_pcap: 1
+src_ip: 192.168.1.21
+filter_payload_type: 99,102

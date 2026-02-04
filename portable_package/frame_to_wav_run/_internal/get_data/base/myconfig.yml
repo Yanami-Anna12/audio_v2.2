@@ -1,0 +1,5 @@
+dst_ip: 10.1.1.79
+local_iface: ''
+save_pcap: 0
+src_ip: 10.1.1.82
+filter_payload_type: 99,102
