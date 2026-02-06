@@ -46,8 +46,13 @@ class  DataDecode:
     @staticmethod
     def ADPCMDecoder(Source, nSrcSize, Dest=None):
         try:
-            if Dest is None:
-                Dest = [0] * 220
+            if nSrcSize < 7 or len(Source) < 7:
+                return b''
+
+            out_sample_size = 2 + (nSrcSize - 7) * 2
+            if Dest is None or len(Dest) < out_sample_size:
+                Dest = [0] * out_sample_size
+
             Delta = DataDecode.byte_to_int(DataDecode.get_bytes_value(Source[1]), DataDecode.get_bytes_value(Source[2]),
                                            0, 0)
             Samp1 = DataDecode.byte_to_int(DataDecode.get_bytes_value(Source[3]), DataDecode.get_bytes_value(Source[4]),
@@ -83,25 +88,26 @@ class  DataDecode:
                 Samp1 = Sample
 
             return DataDecode.convert_ints_to_bytes(Dest)
-        except:
+        except Exception:
             # 解码异常直接返回空字节
             return b''
 
     @staticmethod
-    def ECPT(bytes, wDeviceType):
+    def ECPT(src_bytes, wDeviceType):
         ECPT_DATA_SIZE = 220
-        pWords = DataDecode.convert_bytes_to_ints(bytes)
-        print(len(bytes))
-        if len(pWords)<ECPT_DATA_SIZE-1:
+        pWords = DataDecode.convert_bytes_to_ints(src_bytes)
+        if len(pWords) < ECPT_DATA_SIZE:
         # # 修复点1：长度不足时返回空字节，而不是None
             return b''
+
+        pWords = pWords[:ECPT_DATA_SIZE]
         # Step 1: Decrypt the last word using the device type as the key
         pWords[ECPT_DATA_SIZE - 1] ^= (wDeviceType << 8) | (~wDeviceType & 0xFF)
         # pWords[ECPT_DATA_SIZE - 1] ^= (wDeviceType << 8) & 0xFF00
         # pWords[ECPT_DATA_SIZE - 1] ^= (~wDeviceType) & 0x00FF
 
         # Step 2: Use the last word as a key for encryption
-        wEncryptKey = (pWords[ECPT_DATA_SIZE - 1] << 5) | (pWords[ECPT_DATA_SIZE - 1] >> 11)
+        wEncryptKey = ((pWords[ECPT_DATA_SIZE - 1] << 5) | (pWords[ECPT_DATA_SIZE - 1] >> 11)) & 0xFFFF
 
         # Step 3: XOR each word with the previous word and the encryption key
         for j in range(1, ECPT_DATA_SIZE - 1):
@@ -110,14 +116,14 @@ class  DataDecode:
         return  DataDecode.convert_ints_to_bytes(pWords)
 
     @staticmethod
-    def convert_bytes_to_ints(bytes):
+    def convert_bytes_to_ints(src_bytes):
         ints = []
-        for i in range(0, len(bytes), 2):
+        for i in range(0, len(src_bytes), 2):
             # # 修复点2：处理字节长度为奇数的情况
-            if i + 1 >= len(bytes):
-                ints.append( DataDecode.byte_to_int(bytes[i], 0, 0, 0))
+            if i + 1 >= len(src_bytes):
+                ints.append(DataDecode.byte_to_int(src_bytes[i], 0, 0, 0))
             else:
-                ints.append( DataDecode.byte_to_int(bytes[i], bytes[i + 1], 0, 0))
+                ints.append(DataDecode.byte_to_int(src_bytes[i], src_bytes[i + 1], 0, 0))
         return ints
 
     @staticmethod
