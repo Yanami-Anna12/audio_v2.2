@@ -88,11 +88,10 @@ class  DataDecode:
             return b''
 
     @staticmethod
-    def ECPT(bytes, wDeviceType):
+    def ECPT(src_bytes, wDeviceType):
         ECPT_DATA_SIZE = 220
-        pWords = DataDecode.convert_bytes_to_ints(bytes)
-        print(len(bytes))
-        if len(pWords)<ECPT_DATA_SIZE-1:
+        pWords = DataDecode.convert_bytes_to_ints(src_bytes)
+        if len(pWords) < ECPT_DATA_SIZE:
         # # 修复点1：长度不足时返回空字节，而不是None
             return b''
         # Step 1: Decrypt the last word using the device type as the key
