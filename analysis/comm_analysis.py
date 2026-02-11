@@ -27,9 +27,17 @@ class CommAnalysis():
     def _get_need_data(self, infos, protocol_type, payload_type=None):
         if protocol_type == "nas":
             data_type = infos[4:6].upper() if len(infos) >= 6 else ""
-            # 192.168.1.12 设备常见 0x94 包，协议头更长，音频从第15字节开始
-            if data_type == "94" and len(infos) > 28:
-                payload_hex = infos[28:]
+            if data_type == "94" and len(infos) >= 28:
+                # 0x94 包: [0:14) 为协议头, [12:14) 为音频长度, 后面才是音频体
+                payload_len = int(infos[24:28], 16)
+                start = 28
+                end = start + payload_len * 2
+                payload_hex = infos[start:end] if end <= len(infos) else infos[start:]
+                need_data = binascii.unhexlify(payload_hex)
+                # 0x94 音频体按 8-bit PCM 处理, 统一转换为 16-bit 便于后续保存/播放
+                need_data = audioop.bias(need_data, 1, -128)
+                need_data = audioop.lin2lin(need_data, 1, 2)
+                return need_data
             else:
                 payload_hex = infos[16:]
         else:
@@ -223,6 +231,9 @@ class CommAnalysis():
                 return decoded, True
 
             elif CommUtils.select_decode_type == "98设备":
+                # NAS 0x94 场景的单包音频体普遍较短, 不满足 ECPT 固定帧长度时直接按原始PCM处理
+                if len(data) < 440:
+                    return data, True
                 decoded = DataDecode.ECPT(data, 0x98)
                 if decoded is None or len(decoded) == 0:
                     return b'', False
