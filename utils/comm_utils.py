@@ -86,7 +86,7 @@ class CommUtils:
     all_datas={}
 
     # nas协议的几种音频数据包
-    nas_audio_type = ['40', '41', '44', '45', '4E']
+    nas_audio_type = ['40', '41', '44', '45', '4E', '94']
 
     #解析一遍后的音频数据
     all_audio_datas = {}

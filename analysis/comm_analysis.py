@@ -24,6 +24,36 @@ class CommAnalysis():
     def __init__(self):
         pass
 
+    def _get_need_data(self, infos, protocol_type, payload_type=None):
+        if protocol_type == "nas":
+            data_type = infos[4:6].upper() if len(infos) >= 6 else ""
+            if data_type == "94" and len(infos) >= 28:
+                # 0x94 包: [0:14) 为协议头, [12:14) 为音频长度, 后面才是音频体
+                payload_len = int(infos[24:28], 16)
+                start = 28
+                end = start + payload_len * 2
+                payload_hex = infos[start:end] if end <= len(infos) else infos[start:]
+                need_data = binascii.unhexlify(payload_hex)
+                # 0x94 音频体按 8-bit PCM 处理, 统一转换为 16-bit 便于后续保存/播放
+                need_data = audioop.bias(need_data, 1, -128)
+                need_data = audioop.lin2lin(need_data, 1, 2)
+                return need_data
+            else:
+                payload_hex = infos[16:]
+        else:
+            payload_hex = infos[24:]
+
+        need_data = binascii.unhexlify(payload_hex)
+
+        if protocol_type != "nas" and payload_type is not None:
+            if payload_type == "0":
+                need_data = audioop.ulaw2lin(need_data, 2)
+            elif payload_type == "8":
+                need_data = audioop.alaw2lin(need_data, 2)
+
+        return need_data
+
+
     #在这里面做数据解析，将选择的音频信息解析出来
     def analysis_data(self):
         #读取选择的音频源的参数
@@ -54,16 +84,7 @@ class CommAnalysis():
                 wav_file.setframerate(CommUtils.select_rate)  # 44.1kHz
                 for infos in need_audio_info:
                     #获取真实音频数据，并从字符流转成字节流
-                    if protocol_type=="nas":
-                        need_data= binascii.unhexlify(infos[16:])
-                    else:
-                        need_data = binascii.unhexlify(infos[24:])
-                        if payload_type=="0":
-                            #将g711 pcmu编码解码出来
-                            need_data = audioop.ulaw2lin(need_data, 2)
-                        elif payload_type=="8":
-                            # 将g711 pcma编码解码出来
-                            need_data = audioop.alaw2lin(need_data, 2)
+                    need_data = self._get_need_data(infos, protocol_type, payload_type)
                     #将数据解密
                     need_data, result = self.decode_data(need_data)
                     if not result:
@@ -132,14 +153,7 @@ class CommAnalysis():
             try:
                 # 读取音频数据并播放
                 for infos in need_audio_info:
-                    if protocol_type == "nas":
-                        need_data = binascii.unhexlify(infos[16:])
-                    else:
-                        need_data = binascii.unhexlify(infos[24:])
-                        if payload_type == "0":
-                            need_data = audioop.ulaw2lin(need_data, 2)
-                        elif payload_type == "8":
-                            need_data = audioop.alaw2lin(need_data, 2)
+                    need_data = self._get_need_data(infos, protocol_type, payload_type)
                     if CommUtils.is_stop: #如果点了停止试听，则跳出循环
                         break
                     # 将数据解密
@@ -217,6 +231,9 @@ class CommAnalysis():
                 return decoded, True
 
             elif CommUtils.select_decode_type == "98设备":
+                # NAS 0x94 场景的单包音频体普遍较短, 不满足 ECPT 固定帧长度时直接按原始PCM处理
+                if len(data) < 440:
+                    return data, True
                 decoded = DataDecode.ECPT(data, 0x98)
                 if decoded is None or len(decoded) == 0:
                     return b'', False
@@ -237,10 +254,7 @@ class CommAnalysis():
             with open(save_path, 'wb') as f:
                 # 逐帧写入MP3数据
                 for infos in need_audio_info:
-                    if protocol_type=="nas":
-                        need_data= binascii.unhexlify(infos[16:])
-                    else:
-                        need_data = binascii.unhexlify(infos[24:])
+                    need_data = self._get_need_data(infos, protocol_type)
                     # 将数据解密
                     need_data, result = self.decode_data(need_data)
                     if not result:
