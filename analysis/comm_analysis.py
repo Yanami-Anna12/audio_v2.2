@@ -24,6 +24,28 @@ class CommAnalysis():
     def __init__(self):
         pass
 
+    def _get_need_data(self, infos, protocol_type, payload_type=None):
+        if protocol_type == "nas":
+            data_type = infos[4:6].upper() if len(infos) >= 6 else ""
+            # 192.168.1.12 设备常见 0x94 包，协议头更长，音频从第15字节开始
+            if data_type == "94" and len(infos) > 28:
+                payload_hex = infos[28:]
+            else:
+                payload_hex = infos[16:]
+        else:
+            payload_hex = infos[24:]
+
+        need_data = binascii.unhexlify(payload_hex)
+
+        if protocol_type != "nas" and payload_type is not None:
+            if payload_type == "0":
+                need_data = audioop.ulaw2lin(need_data, 2)
+            elif payload_type == "8":
+                need_data = audioop.alaw2lin(need_data, 2)
+
+        return need_data
+
+
     #在这里面做数据解析，将选择的音频信息解析出来
     def analysis_data(self):
         #读取选择的音频源的参数
@@ -54,16 +76,7 @@ class CommAnalysis():
                 wav_file.setframerate(CommUtils.select_rate)  # 44.1kHz
                 for infos in need_audio_info:
                     #获取真实音频数据，并从字符流转成字节流
-                    if protocol_type=="nas":
-                        need_data= binascii.unhexlify(infos[16:])
-                    else:
-                        need_data = binascii.unhexlify(infos[24:])
-                        if payload_type=="0":
-                            #将g711 pcmu编码解码出来
-                            need_data = audioop.ulaw2lin(need_data, 2)
-                        elif payload_type=="8":
-                            # 将g711 pcma编码解码出来
-                            need_data = audioop.alaw2lin(need_data, 2)
+                    need_data = self._get_need_data(infos, protocol_type, payload_type)
                     #将数据解密
                     need_data, result = self.decode_data(need_data)
                     if not result:
@@ -132,14 +145,7 @@ class CommAnalysis():
             try:
                 # 读取音频数据并播放
                 for infos in need_audio_info:
-                    if protocol_type == "nas":
-                        need_data = binascii.unhexlify(infos[16:])
-                    else:
-                        need_data = binascii.unhexlify(infos[24:])
-                        if payload_type == "0":
-                            need_data = audioop.ulaw2lin(need_data, 2)
-                        elif payload_type == "8":
-                            need_data = audioop.alaw2lin(need_data, 2)
+                    need_data = self._get_need_data(infos, protocol_type, payload_type)
                     if CommUtils.is_stop: #如果点了停止试听，则跳出循环
                         break
                     # 将数据解密
@@ -237,10 +243,7 @@ class CommAnalysis():
             with open(save_path, 'wb') as f:
                 # 逐帧写入MP3数据
                 for infos in need_audio_info:
-                    if protocol_type=="nas":
-                        need_data= binascii.unhexlify(infos[16:])
-                    else:
-                        need_data = binascii.unhexlify(infos[24:])
+                    need_data = self._get_need_data(infos, protocol_type)
                     # 将数据解密
                     need_data, result = self.decode_data(need_data)
                     if not result:
